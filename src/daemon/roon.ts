@@ -2,7 +2,8 @@ import RoonApi from "node-roon-api";
 import RoonApiTransport from "node-roon-api-transport";
 import RoonApiBrowse from "node-roon-api-browse";
 import RoonApiStatus from "node-roon-api-status";
-import type { Zone, BrowseResult, BrowseItem, BrowseList, QueueItem, LoopMode } from "../shared/types.js";
+import RoonApiImage from "node-roon-api-image";
+import type { Zone, BrowseResult, BrowseItem, BrowseList, QueueItem, LoopMode, ImageOptions, ImageResult } from "../shared/types.js";
 import { StateManager } from "./state.js";
 
 export interface RoonConfig {
@@ -18,6 +19,7 @@ export class RoonConnection {
   private roon: any;
   private transport: any;
   private browse: any;
+  private image: any;
   private status: any;
   private state: StateManager;
   private config: RoonConfig;
@@ -46,9 +48,10 @@ export class RoonConnection {
         this.core = core;
         this.isConnected = true;
 
-        // Get transport service from core
+        // Get services from core
         this.transport = core.services.RoonApiTransport;
         this.browse = core.services.RoonApiBrowse;
+        this.image = core.services.RoonApiImage;
 
         // Subscribe to transport updates
         if (this.transport) {
@@ -77,6 +80,7 @@ export class RoonConnection {
         this.isConnected = false;
         this.transport = null;
         this.browse = null;
+        this.image = null;
         this.state.setConnectionStatus(false, false);
         this.status.set_status("Disconnected - waiting for reconnection...", false);
       },
@@ -87,7 +91,7 @@ export class RoonConnection {
 
     // Initialize services
     this.roon.init_services({
-      required_services: [RoonApiTransport, RoonApiBrowse],
+      required_services: [RoonApiTransport, RoonApiBrowse, RoonApiImage],
       provided_services: [this.status],
     });
   }
@@ -543,6 +547,45 @@ export class RoonConnection {
           }
 
           resolve(items);
+        });
+      });
+    });
+  }
+
+  /**
+   * Get album art image
+   */
+  async getAlbumArt(imageKey: string, options?: ImageOptions): Promise<ImageResult> {
+    if (!this.state.isReady()) {
+      throw new Error("Not connected to Roon Core");
+    }
+
+    if (!this.image) {
+      throw new Error("Image service not available");
+    }
+
+    return new Promise((resolve, reject) => {
+      const imageOptions: any = {};
+
+      if (options?.scale) {
+        imageOptions.scale = options.scale;
+        imageOptions.width = options.width || 300;
+        imageOptions.height = options.height || 300;
+      }
+
+      if (options?.format) {
+        imageOptions.format = options.format;
+      }
+
+      this.image.get_image(imageKey, imageOptions, (error: any, contentType: string, imageData: Buffer) => {
+        if (error) {
+          reject(new Error(`Failed to get image: ${error}`));
+          return;
+        }
+
+        resolve({
+          contentType: contentType || "image/jpeg",
+          data: imageData.toString("base64"),
         });
       });
     });

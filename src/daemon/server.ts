@@ -1,9 +1,10 @@
 import * as net from "net";
 import * as fs from "fs";
-import type { IPCRequest, IPCResponse, Methods } from "../shared/protocol.js";
+import type { IPCRequest, IPCResponse, Methods, SubscriptionEventType, SubscribeParams, SubscribeResult } from "../shared/protocol.js";
 import { ErrorCodes } from "../shared/protocol.js";
 import type { RoonConnection } from "./roon.js";
 import type { LoopMode, BrowseItem, BrowseResult } from "../shared/types.js";
+import { SubscriptionManager } from "./subscriptions.js";
 
 /**
  * IPCServer listens on a Unix socket and handles JSON-RPC style requests
@@ -16,10 +17,52 @@ export class IPCServer {
   private clients: Set<net.Socket> = new Set();
   private lastBrowseItems: BrowseItem[] = [];
   private lastBrowseHierarchy: string = "browse";
+  private subscriptionManager: SubscriptionManager;
 
   constructor(roon: RoonConnection, socketPath: string) {
     this.roon = roon;
     this.socketPath = socketPath;
+    this.subscriptionManager = new SubscriptionManager();
+
+    // Wire up state events to subscription broadcasts
+    this.setupEventBroadcasting();
+  }
+
+  /**
+   * Set up event broadcasting from StateManager to subscribers
+   */
+  private setupEventBroadcasting(): void {
+    const state = this.roon.getState();
+
+    state.on("position", (zoneId: string, data: unknown) => {
+      this.subscriptionManager.broadcast("position", data, zoneId);
+    });
+
+    state.on("state", (zoneId: string, data: unknown) => {
+      this.subscriptionManager.broadcast("state", data, zoneId);
+    });
+
+    state.on("track", (zoneId: string, data: unknown) => {
+      this.subscriptionManager.broadcast("track", data, zoneId);
+    });
+
+    state.on("volume", (outputId: string, data: unknown) => {
+      // Find zone for this output
+      const output = state.getOutput(outputId);
+      this.subscriptionManager.broadcast("volume", data, output?.zoneId);
+    });
+
+    state.on("settings", (zoneId: string, data: unknown) => {
+      this.subscriptionManager.broadcast("settings", data, zoneId);
+    });
+
+    state.on("zones", (data: unknown) => {
+      this.subscriptionManager.broadcast("zones", data);
+    });
+
+    state.on("connection", (data: unknown) => {
+      this.subscriptionManager.broadcast("connection", data);
+    });
   }
 
   /**
@@ -106,12 +149,14 @@ export class IPCServer {
 
     socket.on("end", () => {
       this.clients.delete(socket);
+      this.subscriptionManager.unsubscribe(socket);
       console.log("Client disconnected");
     });
 
     socket.on("error", (err) => {
       console.error("Socket error:", err);
       this.clients.delete(socket);
+      this.subscriptionManager.unsubscribe(socket);
     });
   }
 
@@ -133,7 +178,7 @@ export class IPCServer {
     }
 
     try {
-      const result = await this.handleMethod(request.method, request.params || {});
+      const result = await this.handleMethod(request.method, request.params || {}, socket);
       this.sendResponse(socket, request.id, result);
     } catch (err: any) {
       const errorCode = err.code || ErrorCodes.UNKNOWN;
@@ -145,7 +190,7 @@ export class IPCServer {
   /**
    * Route method to appropriate handler
    */
-  private async handleMethod(method: string, params: Record<string, unknown>): Promise<unknown> {
+  private async handleMethod(method: string, params: Record<string, unknown>, socket: net.Socket): Promise<unknown> {
     const state = this.roon.getState();
 
     switch (method) {
@@ -217,6 +262,16 @@ export class IPCServer {
       // Queue
       case "queue":
         return this.handleQueue(params);
+
+      // Subscriptions
+      case "subscribe":
+        return this.handleSubscribe(socket, params);
+      case "unsubscribe":
+        return this.handleUnsubscribe(socket);
+
+      // Album art
+      case "album-art":
+        return this.handleAlbumArt(params);
 
       default:
         throw { code: ErrorCodes.INVALID_PARAMS, message: `Unknown method: ${method}` };
@@ -648,6 +703,92 @@ export class IPCServer {
       return await this.roon.getQueue(zone);
     } catch (err: any) {
       throw { code: ErrorCodes.ROON_ERROR, message: err.message };
+    }
+  }
+
+  /**
+   * Handle subscribe
+   */
+  private handleSubscribe(socket: net.Socket, params: Record<string, unknown>): SubscribeResult {
+    const events = params.events as SubscriptionEventType[] | undefined;
+    const zoneFilters = params.zones as string[] | undefined;
+
+    if (!events || !Array.isArray(events) || events.length === 0) {
+      throw { code: ErrorCodes.INVALID_PARAMS, message: "events array required" };
+    }
+
+    // Validate event types
+    const validEvents: SubscriptionEventType[] = [
+      "position",
+      "state",
+      "track",
+      "volume",
+      "settings",
+      "zones",
+      "connection",
+    ];
+    for (const e of events) {
+      if (!validEvents.includes(e)) {
+        throw { code: ErrorCodes.INVALID_PARAMS, message: `Invalid event type: ${e}` };
+      }
+    }
+
+    // Resolve zone filters to IDs
+    const resolvedZoneIds: string[] = [];
+    if (zoneFilters && zoneFilters.length > 0) {
+      const state = this.roon.getState();
+      for (const z of zoneFilters) {
+        const zone = state.getZone(z);
+        if (zone) {
+          resolvedZoneIds.push(zone.zoneId);
+        }
+        // Silently ignore unknown zones - they may appear later
+      }
+    }
+
+    this.subscriptionManager.subscribe(
+      socket,
+      { events, zones: zoneFilters },
+      resolvedZoneIds
+    );
+
+    return {
+      subscribed: true,
+      events,
+      zones: resolvedZoneIds,
+    };
+  }
+
+  /**
+   * Handle unsubscribe
+   */
+  private handleUnsubscribe(socket: net.Socket): { unsubscribed: boolean } {
+    this.subscriptionManager.unsubscribe(socket);
+    return { unsubscribed: true };
+  }
+
+  /**
+   * Handle album art
+   */
+  private async handleAlbumArt(params: Record<string, unknown>): Promise<{ contentType: string; data: string }> {
+    if (!this.roon.getState().isReady()) {
+      throw { code: ErrorCodes.NOT_CONNECTED, message: "Not connected to Roon Core" };
+    }
+
+    const imageKey = params.imageKey as string;
+    if (!imageKey) {
+      throw { code: ErrorCodes.INVALID_PARAMS, message: "imageKey parameter required" };
+    }
+
+    try {
+      return await this.roon.getAlbumArt(imageKey, {
+        scale: params.scale as "fit" | "fill" | "stretch" | undefined,
+        width: params.width as number | undefined,
+        height: params.height as number | undefined,
+        format: params.format as "image/jpeg" | "image/png" | undefined,
+      });
+    } catch (err: any) {
+      throw { code: ErrorCodes.IMAGE_NOT_FOUND, message: err.message || "Failed to get image" };
     }
   }
 

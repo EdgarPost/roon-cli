@@ -31,8 +31,40 @@ export const ErrorCodes = {
   INVALID_PARAMS: 5,
   ROON_ERROR: 6,
   BROWSE_ERROR: 7,
+  IMAGE_NOT_FOUND: 8,
   UNKNOWN: 99,
 } as const;
+
+// Subscription event types
+export type SubscriptionEventType =
+  | "position"
+  | "state"
+  | "track"
+  | "volume"
+  | "settings"
+  | "zones"
+  | "connection";
+
+// Event message (pushed to subscribers)
+export interface IPCEvent {
+  event: SubscriptionEventType;
+  data: unknown;
+  zoneId?: string;
+  timestamp: number;
+}
+
+// Subscribe request params
+export interface SubscribeParams {
+  events: SubscriptionEventType[];
+  zones?: string[]; // Zone IDs or names to filter (empty = all zones)
+}
+
+// Subscribe result
+export interface SubscribeResult {
+  subscribed: boolean;
+  events: SubscriptionEventType[];
+  zones: string[]; // Resolved zone IDs
+}
 
 // Method definitions
 export type Methods = {
@@ -138,6 +170,31 @@ export type Methods = {
   queue: {
     params: { zone?: string };
     result: QueueItem[];
+  };
+
+  // Subscriptions
+  subscribe: {
+    params: SubscribeParams;
+    result: SubscribeResult;
+  };
+  unsubscribe: {
+    params: undefined;
+    result: { unsubscribed: boolean };
+  };
+
+  // Album art
+  "album-art": {
+    params: {
+      imageKey: string;
+      scale?: "fit" | "fill" | "stretch";
+      width?: number;
+      height?: number;
+      format?: "image/jpeg" | "image/png";
+    };
+    result: {
+      contentType: string;
+      data: string; // base64 encoded
+    };
   };
 };
 

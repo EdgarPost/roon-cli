@@ -11,6 +11,8 @@ A command-line interface for [Roon](https://roonlabs.com/) music player. Control
 - **Search**: search library and play results directly
 - **Queue**: view and manage playback queue
 - **Settings**: shuffle, loop, Roon Radio
+- **Album art**: fetch album artwork in various sizes and formats
+- **Real-time events**: subscribe to playback state, position, track changes
 - **JSON output**: all commands support `--json` for scripting and status bars
 - **Systemd service**: runs as a user service for always-on control
 
@@ -210,6 +212,28 @@ roon back
 - `→` = List (selecting shows more items)
 - `▶…` = Action list (shows options like "Play Now", "Add to Queue")
 
+### Album Art
+
+| Command | Description |
+|---------|-------------|
+| `roon album-art` | Get album art for current track |
+| `roon album-art -o cover.jpg` | Save album art to file |
+| `roon album-art --json` | Output as JSON with base64 data |
+| `roon album-art -s 500` | Specify size (default: 300px) |
+| `roon album-art -k <imageKey>` | Get art by specific image key |
+| `roon album-art --format png` | Get PNG instead of JPEG |
+
+### Real-time Events
+
+| Command | Description |
+|---------|-------------|
+| `roon subscribe` | Subscribe to default events (state, track, position) |
+| `roon subscribe -e state,track` | Subscribe to specific events |
+| `roon subscribe -z "Living Room"` | Filter to specific zone |
+| `roon subscribe --json` | Output events as JSON |
+
+Event types: `position`, `state`, `track`, `volume`, `settings`, `zones`, `connection`
+
 ### JSON Output
 
 All data-returning commands support `--json` / `-j`:
@@ -219,6 +243,7 @@ roon status --json          # Now playing as JSON
 roon zones --json           # Zones list as JSON
 roon search "query" --json  # Search results as JSON
 roon queue --json           # Queue as JSON
+roon album-art --json       # Album art as base64 JSON
 ```
 
 ## Configuration
@@ -308,6 +333,158 @@ Style in `~/.config/waybar/style.css`:
     color: #6c7086;
 }
 ```
+
+## TUI/GUI Integration
+
+The daemon exposes a Unix socket IPC interface that TUIs and GUIs can use directly for real-time updates and control.
+
+### Socket Protocol
+
+The daemon listens on `/tmp/roon-cli.sock` (configurable). Protocol is JSON-RPC style with newline-delimited messages.
+
+**Request format:**
+```json
+{"id": "unique-id", "method": "play", "params": {"zone": "Living Room"}}
+```
+
+**Response format:**
+```json
+{"id": "unique-id", "result": {"success": true}}
+```
+
+**Error format:**
+```json
+{"id": "unique-id", "error": {"code": 1, "message": "Not connected to Roon Core"}}
+```
+
+### Real-time Event Streaming
+
+Subscribe to receive push events without polling:
+
+**Subscribe request:**
+```json
+{
+  "id": "sub-1",
+  "method": "subscribe",
+  "params": {
+    "events": ["position", "state", "track", "volume", "settings"],
+    "zones": ["Living Room"]
+  }
+}
+```
+
+**Events pushed to client (no `id` field - distinguishes from responses):**
+```json
+{"event": "position", "data": {"seekPosition": 45, "length": 180}, "zoneId": "zone-123", "timestamp": 1703356800000}
+{"event": "state", "data": {"state": "playing", "isPlayAllowed": false, "isPauseAllowed": true}, "zoneId": "zone-123", "timestamp": 1703356800001}
+{"event": "track", "data": {"artist": "King Gizzard", "track": "Robot Stop", "album": "Nonagon Infinity", "imageKey": "abc123", "length": 180}, "zoneId": "zone-123", "timestamp": 1703356800002}
+{"event": "volume", "data": {"outputId": "out-1", "outputName": "Living Room", "value": 50, "isMuted": false}, "zoneId": "zone-123", "timestamp": 1703356800003}
+{"event": "settings", "data": {"loop": "disabled", "shuffle": false, "autoRadio": true}, "zoneId": "zone-123", "timestamp": 1703356800004}
+```
+
+### Event Types
+
+| Event | Frequency | Data |
+|-------|-----------|------|
+| `position` | ~1/second | `seekPosition`, `length`, `queueTimeRemaining` |
+| `state` | On change | `state`, `isPlayAllowed`, `isPauseAllowed`, etc. |
+| `track` | On change | `artist`, `track`, `album`, `imageKey`, `length` |
+| `volume` | On change | `outputId`, `outputName`, `value`, `isMuted` |
+| `settings` | On change | `loop`, `shuffle`, `autoRadio` |
+| `zones` | On change | `type` (added/removed), `zones`, `removedZoneIds` |
+| `connection` | On change | `connected`, `paired`, `coreName`, `coreId` |
+
+### Album Art Retrieval
+
+```json
+{"id": "art-1", "method": "album-art", "params": {"imageKey": "abc123", "scale": "fit", "width": 300, "height": 300, "format": "image/jpeg"}}
+```
+
+Response contains base64-encoded image:
+```json
+{"id": "art-1", "result": {"contentType": "image/jpeg", "data": "/9j/4AAQSkZJRg..."}}
+```
+
+### TypeScript/JavaScript Integration
+
+```typescript
+import { SubscriptionClient, send } from "roon-cli/client";
+
+// One-off commands
+const zones = await send("zones");
+const art = await send("album-art", { imageKey: "abc123", width: 200, height: 200 });
+
+// Real-time subscription
+const client = new SubscriptionClient();
+await client.subscribe({
+  events: ["position", "state", "track", "volume", "settings"],
+  zones: ["Living Room"]
+});
+
+client.on("position", (data, zoneId, timestamp) => {
+  updateProgressBar(data.seekPosition, data.length);
+});
+
+client.on("track", (data, zoneId, timestamp) => {
+  updateNowPlaying(data);
+  fetchAlbumArt(data.imageKey);
+});
+
+client.on("state", (data, zoneId, timestamp) => {
+  updatePlaybackState(data.state);
+});
+
+// Clean up
+await client.unsubscribe();
+```
+
+### Available IPC Methods
+
+| Method | Params | Description |
+|--------|--------|-------------|
+| `status` | - | Get daemon connection status |
+| `zones` | - | List all zones |
+| `zone` | `zone?` | Get specific zone state |
+| `outputs` | - | List all outputs |
+| `play` | `zone?` | Start playback |
+| `pause` | `zone?` | Pause playback |
+| `playpause` | `zone?` | Toggle play/pause |
+| `stop` | `zone?` | Stop playback |
+| `next` | `zone?` | Next track |
+| `previous` | `zone?` | Previous track |
+| `seek` | `zone?`, `seconds`, `relative?` | Seek position |
+| `volume` | `output`, `value`, `relative?` | Change volume |
+| `mute` | `output` | Mute output |
+| `unmute` | `output` | Unmute output |
+| `shuffle` | `zone?`, `enabled?` | Toggle/set shuffle |
+| `loop` | `zone?`, `mode?` | Cycle/set loop mode |
+| `radio` | `zone?`, `enabled?` | Toggle/set Roon Radio |
+| `browse` | `hierarchy?`, `itemKey?`, etc. | Browse library |
+| `search` | `query`, `zone?` | Search library |
+| `select` | `index` or `itemKey`, `zone?` | Select browse item |
+| `back` | `levels?`, `zone?` | Go back in browse |
+| `queue` | `zone?` | Get queue items |
+| `group` | `outputs[]` | Group outputs |
+| `ungroup` | `outputs[]` | Ungroup outputs |
+| `transfer` | `from`, `to` | Transfer queue |
+| `standby` | `output` | Standby output |
+| `subscribe` | `events[]`, `zones?[]` | Subscribe to events |
+| `unsubscribe` | - | Unsubscribe |
+| `album-art` | `imageKey`, `scale?`, `width?`, `height?`, `format?` | Get album art |
+
+### Error Codes
+
+| Code | Name | Description |
+|------|------|-------------|
+| 1 | `NOT_CONNECTED` | Not connected to Roon Core |
+| 2 | `NOT_PAIRED` | Not paired with Roon Core |
+| 3 | `ZONE_NOT_FOUND` | Zone not found |
+| 4 | `OUTPUT_NOT_FOUND` | Output not found |
+| 5 | `INVALID_PARAMS` | Invalid parameters |
+| 6 | `ROON_ERROR` | Roon API error |
+| 7 | `BROWSE_ERROR` | Browse operation failed |
+| 8 | `IMAGE_NOT_FOUND` | Image not found |
+| 99 | `UNKNOWN` | Unknown error |
 
 ## Development
 

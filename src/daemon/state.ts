@@ -1,10 +1,37 @@
-import type { Zone, Output, DaemonState, NowPlaying, PlayState, LoopMode } from "../shared/types.js";
+import { EventEmitter } from "events";
+import type {
+  Zone,
+  Output,
+  DaemonState,
+  NowPlaying,
+  PlayState,
+  LoopMode,
+  PositionEventData,
+  StateEventData,
+  TrackEventData,
+  VolumeEventData,
+  SettingsEventData,
+  ZonesEventData,
+  ConnectionEventData,
+} from "../shared/types.js";
+
+// Event types for TypeScript
+export interface StateManagerEvents {
+  position: (zoneId: string, data: PositionEventData) => void;
+  state: (zoneId: string, data: StateEventData) => void;
+  track: (zoneId: string, data: TrackEventData) => void;
+  volume: (outputId: string, data: VolumeEventData) => void;
+  settings: (zoneId: string, data: SettingsEventData) => void;
+  zones: (data: ZonesEventData) => void;
+  connection: (data: ConnectionEventData) => void;
+}
 
 /**
  * StateManager caches zone and output information from Roon subscriptions
  * and provides methods to query the current state.
+ * Extends EventEmitter to emit granular events for subscriptions.
  */
-export class StateManager {
+export class StateManager extends EventEmitter {
   private zones: Map<string, Zone> = new Map();
   private outputs: Map<string, Output> = new Map();
   private connected: boolean = false;
@@ -17,10 +44,26 @@ export class StateManager {
    * Update connection status
    */
   setConnectionStatus(connected: boolean, paired: boolean, coreName?: string, coreId?: string): void {
+    const changed =
+      this.connected !== connected ||
+      this.paired !== paired ||
+      this.coreName !== coreName ||
+      this.coreId !== coreId;
+
     this.connected = connected;
     this.paired = paired;
     this.coreName = coreName;
     this.coreId = coreId;
+
+    if (changed) {
+      this.emit("connection", {
+        connected,
+        paired,
+        coreName,
+        coreId,
+      } as ConnectionEventData);
+    }
+
     this.notifyChange();
   }
 
@@ -39,24 +82,95 @@ export class StateManager {
       for (const roonZone of data.zones) {
         this.addOrUpdateZone(roonZone);
       }
+      // Emit zones event for initial load
+      this.emit("zones", {
+        type: "added",
+        zones: this.getZones(),
+      } as ZonesEventData);
     }
 
     // Handle zones_added
     if (data.zones_added) {
+      const addedZones: Zone[] = [];
       for (const roonZone of data.zones_added) {
-        this.addOrUpdateZone(roonZone);
+        const zone = this.parseZone(roonZone);
+        this.zones.set(zone.zoneId, zone);
+        for (const output of zone.outputs) {
+          this.outputs.set(output.outputId, output);
+        }
+        addedZones.push(zone);
+      }
+      if (addedZones.length > 0) {
+        this.emit("zones", {
+          type: "added",
+          zones: addedZones,
+        } as ZonesEventData);
       }
     }
 
-    // Handle zones_changed
+    // Handle zones_changed - detect specific changes
     if (data.zones_changed) {
       for (const roonZone of data.zones_changed) {
-        this.addOrUpdateZone(roonZone);
+        const zoneId = roonZone.zone_id;
+        const prevZone = this.zones.get(zoneId);
+        const newZone = this.parseZone(roonZone);
+
+        // Detect state change
+        if (prevZone?.state !== newZone.state) {
+          this.emit("state", zoneId, {
+            state: newZone.state,
+            isPlayAllowed: newZone.isPlayAllowed,
+            isPauseAllowed: newZone.isPauseAllowed,
+            isSeekAllowed: newZone.isSeekAllowed,
+            isNextAllowed: newZone.isNextAllowed,
+            isPreviousAllowed: newZone.isPreviousAllowed,
+          } as StateEventData);
+        }
+
+        // Detect track change
+        if (this.trackChanged(prevZone?.nowPlaying, newZone.nowPlaying)) {
+          this.emit("track", zoneId, {
+            artist: newZone.nowPlaying?.artist || "",
+            track: newZone.nowPlaying?.track || "",
+            album: newZone.nowPlaying?.album || "",
+            imageKey: newZone.nowPlaying?.imageKey,
+            length: newZone.nowPlaying?.length,
+          } as TrackEventData);
+        }
+
+        // Detect settings change
+        if (this.settingsChanged(prevZone?.settings, newZone.settings)) {
+          this.emit("settings", zoneId, newZone.settings as SettingsEventData);
+        }
+
+        // Detect volume/mute changes for each output
+        for (const output of newZone.outputs) {
+          const prevOutput = prevZone?.outputs.find(
+            (o) => o.outputId === output.outputId
+          );
+          if (this.volumeChanged(prevOutput?.volume, output.volume)) {
+            this.emit("volume", output.outputId, {
+              outputId: output.outputId,
+              outputName: output.displayName,
+              value: output.volume?.value,
+              isMuted: output.volume?.isMuted || false,
+              min: output.volume?.min,
+              max: output.volume?.max,
+            } as VolumeEventData);
+          }
+        }
+
+        // Update stored zone
+        this.zones.set(zoneId, newZone);
+        for (const output of newZone.outputs) {
+          this.outputs.set(output.outputId, output);
+        }
       }
     }
 
     // Handle zones_removed
     if (data.zones_removed) {
+      const removedIds: string[] = [];
       for (const zoneId of data.zones_removed) {
         const zone = this.zones.get(zoneId);
         if (zone) {
@@ -65,23 +179,82 @@ export class StateManager {
           }
         }
         this.zones.delete(zoneId);
+        removedIds.push(zoneId);
+      }
+      if (removedIds.length > 0) {
+        this.emit("zones", {
+          type: "removed",
+          zones: [],
+          removedZoneIds: removedIds,
+        } as ZonesEventData);
       }
     }
 
-    // Handle zones_seek_changed (just update seek position)
+    // Handle zones_seek_changed (high frequency position updates)
     if (data.zones_seek_changed) {
       for (const seekData of data.zones_seek_changed) {
         const zone = this.zones.get(seekData.zone_id);
-        if (zone && zone.nowPlaying) {
-          zone.nowPlaying.seekPosition = seekData.seek_position;
+        if (zone) {
+          // Update stored position
+          if (zone.nowPlaying) {
+            zone.nowPlaying.seekPosition = seekData.seek_position;
+          }
           if (seekData.queue_time_remaining !== undefined) {
             zone.queueTimeRemaining = seekData.queue_time_remaining;
           }
+
+          // Emit position event
+          this.emit("position", seekData.zone_id, {
+            seekPosition: seekData.seek_position,
+            length: zone.nowPlaying?.length,
+            queueTimeRemaining: seekData.queue_time_remaining,
+          } as PositionEventData);
         }
       }
     }
 
     this.notifyChange();
+  }
+
+  /**
+   * Check if track changed
+   */
+  private trackChanged(prev?: NowPlaying, next?: NowPlaying): boolean {
+    if (!prev && !next) return false;
+    if (!prev || !next) return true;
+    return (
+      prev.track !== next.track ||
+      prev.artist !== next.artist ||
+      prev.album !== next.album
+    );
+  }
+
+  /**
+   * Check if settings changed
+   */
+  private settingsChanged(
+    prev?: Zone["settings"],
+    next?: Zone["settings"]
+  ): boolean {
+    if (!prev && !next) return false;
+    if (!prev || !next) return true;
+    return (
+      prev.loop !== next.loop ||
+      prev.shuffle !== next.shuffle ||
+      prev.autoRadio !== next.autoRadio
+    );
+  }
+
+  /**
+   * Check if volume changed
+   */
+  private volumeChanged(
+    prev?: Output["volume"],
+    next?: Output["volume"]
+  ): boolean {
+    if (!prev && !next) return false;
+    if (!prev || !next) return true;
+    return prev.value !== next.value || prev.isMuted !== next.isMuted;
   }
 
   /**

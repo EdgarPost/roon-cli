@@ -113,3 +113,71 @@ export interface WaybarOutput {
   percentage?: number;
   alt?: string;
 }
+
+// Subscription event data types
+export interface PositionEventData {
+  seekPosition: number;
+  length?: number;
+  queueTimeRemaining?: number;
+}
+
+export interface StateEventData {
+  state: PlayState;
+  isPlayAllowed: boolean;
+  isPauseAllowed: boolean;
+  isSeekAllowed: boolean;
+  isNextAllowed: boolean;
+  isPreviousAllowed: boolean;
+}
+
+export interface TrackEventData {
+  artist: string;
+  track: string;
+  album: string;
+  imageKey?: string;
+  length?: number;
+}
+
+export interface VolumeEventData {
+  outputId: string;
+  outputName: string;
+  value?: number;
+  isMuted: boolean;
+  min?: number;
+  max?: number;
+}
+
+export interface SettingsEventData {
+  loop: LoopMode;
+  shuffle: boolean;
+  autoRadio: boolean;
+}
+
+export interface ZonesEventData {
+  type: "added" | "removed" | "changed";
+  zones: Zone[];
+  removedZoneIds?: string[];
+}
+
+export interface ConnectionEventData {
+  connected: boolean;
+  paired: boolean;
+  coreName?: string;
+  coreId?: string;
+}
+
+// Image types
+export type ImageScale = "fit" | "fill" | "stretch";
+export type ImageFormat = "image/jpeg" | "image/png";
+
+export interface ImageOptions {
+  scale?: ImageScale;
+  width?: number;
+  height?: number;
+  format?: ImageFormat;
+}
+
+export interface ImageResult {
+  contentType: string;
+  data: string; // base64 encoded
+}
