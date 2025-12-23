@@ -156,7 +156,7 @@ export function formatOutputs(outputs: Output[]): string {
   return lines.join("\n");
 }
 
-export function formatBrowse(result: BrowseResult): string {
+export function formatBrowse(result: BrowseResult, showKeys: boolean = true): string {
   if (result.action === "message" && result.message) {
     return result.message;
   }
@@ -175,23 +175,35 @@ export function formatBrowse(result: BrowseResult): string {
   if (result.items.length === 0) {
     lines.push("No items found");
   } else {
-    for (const item of result.items) {
-      lines.push(formatBrowseItem(item));
+    for (let i = 0; i < result.items.length; i++) {
+      const item = result.items[i];
+      lines.push(formatBrowseItem(item, i + 1, showKeys));
     }
+  }
+
+  if (showKeys && result.items.length > 0) {
+    lines.push("");
+    lines.push("Use 'roon select <number>' or 'roon select --key <item_key>' to select an item");
   }
 
   return lines.join("\n");
 }
 
-function formatBrowseItem(item: BrowseItem): string {
-  let str = item.title;
+function formatBrowseItem(item: BrowseItem, index: number, showKey: boolean): string {
+  const num = index.toString().padStart(2, " ");
+  let str = `${num}. ${item.title}`;
 
   if (item.subtitle) {
     str += ` - ${item.subtitle}`;
   }
 
   if (item.hint) {
-    str += ` [${item.hint}]`;
+    const hintIcon = item.hint === "action" ? "▶" :
+                     item.hint === "action_list" ? "▶…" :
+                     item.hint === "list" ? "→" : "";
+    if (hintIcon) {
+      str += ` ${hintIcon}`;
+    }
   }
 
   return str;

@@ -3,7 +3,7 @@ import * as fs from "fs";
 import type { IPCRequest, IPCResponse, Methods } from "../shared/protocol.js";
 import { ErrorCodes } from "../shared/protocol.js";
 import type { RoonConnection } from "./roon.js";
-import type { LoopMode } from "../shared/types.js";
+import type { LoopMode, BrowseItem, BrowseResult } from "../shared/types.js";
 
 /**
  * IPCServer listens on a Unix socket and handles JSON-RPC style requests
@@ -14,6 +14,8 @@ export class IPCServer {
   private socketPath: string;
   private roon: RoonConnection;
   private clients: Set<net.Socket> = new Set();
+  private lastBrowseItems: BrowseItem[] = [];
+  private lastBrowseHierarchy: string = "browse";
 
   constructor(roon: RoonConnection, socketPath: string) {
     this.roon = roon;
@@ -197,6 +199,8 @@ export class IPCServer {
         return this.handleBrowse(params);
       case "search":
         return this.handleSearch(params);
+      case "select":
+        return this.handleSelect(params);
 
       // Queue
       case "queue":
@@ -384,14 +388,16 @@ export class IPCServer {
   /**
    * Handle browse
    */
-  private async handleBrowse(params: Record<string, unknown>): Promise<any> {
+  private async handleBrowse(params: Record<string, unknown>): Promise<BrowseResult> {
     if (!this.roon.getState().isReady()) {
       throw { code: ErrorCodes.NOT_CONNECTED, message: "Not connected to Roon Core" };
     }
 
+    const hierarchy = params.hierarchy as string || "browse";
+
     try {
-      return await this.roon.browseBrowse({
-        hierarchy: params.hierarchy as string | undefined,
+      const result = await this.roon.browseBrowse({
+        hierarchy,
         itemKey: params.itemKey as string | undefined,
         input: params.input as string | undefined,
         zoneIdOrName: params.zone as string | undefined,
@@ -401,6 +407,14 @@ export class IPCServer {
         offset: params.offset as number | undefined,
         count: params.count as number | undefined,
       });
+
+      // Store results for select command
+      if (result.items && result.items.length > 0) {
+        this.lastBrowseItems = result.items;
+        this.lastBrowseHierarchy = hierarchy;
+      }
+
+      return result;
     } catch (err: any) {
       throw { code: ErrorCodes.BROWSE_ERROR, message: err.message };
     }
@@ -409,7 +423,7 @@ export class IPCServer {
   /**
    * Handle search
    */
-  private async handleSearch(params: Record<string, unknown>): Promise<any> {
+  private async handleSearch(params: Record<string, unknown>): Promise<BrowseResult> {
     if (!this.roon.getState().isReady()) {
       throw { code: ErrorCodes.NOT_CONNECTED, message: "Not connected to Roon Core" };
     }
@@ -420,11 +434,63 @@ export class IPCServer {
     }
 
     try {
-      return await this.roon.browseBrowse({
+      const result = await this.roon.browseBrowse({
         hierarchy: "search",
         input: query,
         zoneIdOrName: params.zone as string | undefined,
       });
+
+      // Store results for select command
+      if (result.items && result.items.length > 0) {
+        this.lastBrowseItems = result.items;
+        this.lastBrowseHierarchy = "search";
+      }
+
+      return result;
+    } catch (err: any) {
+      throw { code: ErrorCodes.BROWSE_ERROR, message: err.message };
+    }
+  }
+
+  /**
+   * Handle select - select an item from last browse/search results
+   */
+  private async handleSelect(params: Record<string, unknown>): Promise<BrowseResult> {
+    if (!this.roon.getState().isReady()) {
+      throw { code: ErrorCodes.NOT_CONNECTED, message: "Not connected to Roon Core" };
+    }
+
+    let itemKey: string | undefined = params.itemKey as string | undefined;
+
+    // If index provided, look up from last results
+    if (params.index !== undefined) {
+      const index = (params.index as number) - 1; // Convert to 0-based
+      if (index < 0 || index >= this.lastBrowseItems.length) {
+        throw {
+          code: ErrorCodes.INVALID_PARAMS,
+          message: `Invalid index ${params.index}. Last browse had ${this.lastBrowseItems.length} items.`
+        };
+      }
+      itemKey = this.lastBrowseItems[index].itemKey;
+    }
+
+    if (!itemKey) {
+      throw { code: ErrorCodes.INVALID_PARAMS, message: "itemKey or index required" };
+    }
+
+    try {
+      const result = await this.roon.browseBrowse({
+        hierarchy: this.lastBrowseHierarchy,
+        itemKey,
+        zoneIdOrName: params.zone as string | undefined,
+      });
+
+      // Update stored results if we got a new list
+      if (result.items && result.items.length > 0) {
+        this.lastBrowseItems = result.items;
+      }
+
+      return result;
     } catch (err: any) {
       throw { code: ErrorCodes.BROWSE_ERROR, message: err.message };
     }

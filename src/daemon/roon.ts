@@ -348,12 +348,11 @@ export class RoonConnection {
 
         // Load items if needed
         if (result.action === "list" && result.list) {
-          const list = result.list;
           const offset = params.offset || 0;
           const count = params.count || 100;
 
           this.browse.load({
-            hierarchy: params.hierarchy || "browse",
+            hierarchy: opts.hierarchy,  // Use same hierarchy as browse
             offset: offset,
             count: count,
             set_display_offset: offset,

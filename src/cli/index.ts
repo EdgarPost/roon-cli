@@ -17,6 +17,7 @@ import { registerLoop } from "./commands/loop.js";
 import { registerRadio } from "./commands/radio.js";
 import { registerBrowse } from "./commands/browse.js";
 import { registerSearch } from "./commands/search.js";
+import { registerSelect } from "./commands/select.js";
 import { registerQueue } from "./commands/queue.js";
 
 const program = new Command();
@@ -45,6 +46,7 @@ registerLoop(program);
 registerRadio(program);
 registerBrowse(program);
 registerSearch(program);
+registerSelect(program);
 registerQueue(program);
 
 // Parse arguments
