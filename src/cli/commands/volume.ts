@@ -5,7 +5,7 @@ export function registerVolume(program: Command): void {
   program
     .command("volume <level>")
     .description("Set volume level (supports +/- for relative volume)")
-    .option("-o, --output <output>", "Output name or ID")
+    .requiredOption("-o, --output <output>", "Output name or ID")
     .option("-j, --json", "Output as JSON")
     .action(async (levelStr: string, options) => {
       try {

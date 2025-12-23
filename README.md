@@ -123,13 +123,13 @@ All playback commands accept `--zone <zone>` to target a specific zone.
 
 | Command | Description |
 |---------|-------------|
-| `roon volume 50` | Set volume to 50 |
-| `roon volume +5` | Increase volume by 5 |
-| `roon volume -3` | Decrease volume by 3 |
-| `roon mute` | Mute output |
-| `roon unmute` | Unmute output |
+| `roon volume -o "Living Room" 50` | Set volume to 50 |
+| `roon volume -o "Living Room" +5` | Increase volume by 5 |
+| `roon volume -o "Living Room" -3` | Decrease volume by 3 |
+| `roon mute -o "Living Room"` | Mute output |
+| `roon unmute -o "Living Room"` | Unmute output |
 
-Volume commands accept `--output <output>` to target a specific output.
+Volume commands require `--output <output>` (`-o`) to specify the target output.
 
 ### Status & Information
 

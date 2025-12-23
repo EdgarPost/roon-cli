@@ -268,6 +268,10 @@ export class IPCServer {
     const value = params.value as number;
     const relative = (params.relative as boolean) || false;
 
+    if (!output) {
+      throw { code: ErrorCodes.INVALID_PARAMS, message: "output parameter required" };
+    }
+
     if (typeof value !== "number") {
       throw { code: ErrorCodes.INVALID_PARAMS, message: "value parameter required" };
     }
@@ -285,6 +289,10 @@ export class IPCServer {
     }
 
     const output = params.output as string | undefined;
+    if (!output) {
+      throw { code: ErrorCodes.INVALID_PARAMS, message: "output parameter required" };
+    }
+
     await this.roon.mute(output, mute);
     return { success: true };
   }

@@ -195,24 +195,14 @@ export class RoonConnection {
   /**
    * Change volume
    */
-  async changeVolume(outputIdOrName: string | undefined, value: number, relative: boolean = false): Promise<void> {
+  async changeVolume(outputIdOrName: string, value: number, relative: boolean = false): Promise<void> {
     if (!this.state.isReady()) {
       throw new Error("Not connected to Roon Core");
     }
 
-    let output;
-    if (outputIdOrName) {
-      output = this.state.getOutput(outputIdOrName);
-    } else {
-      // Use first output of first zone
-      const zone = this.state.getFirstZone();
-      if (zone) {
-        output = zone.outputs[0];
-      }
-    }
-
+    const output = this.state.getOutput(outputIdOrName);
     if (!output) {
-      throw new Error("Output not found");
+      throw new Error(`Output not found: ${outputIdOrName}`);
     }
 
     const how = relative ? "relative_step" : "absolute";
@@ -231,24 +221,14 @@ export class RoonConnection {
   /**
    * Mute/unmute output
    */
-  async mute(outputIdOrName: string | undefined, mute: boolean): Promise<void> {
+  async mute(outputIdOrName: string, mute: boolean): Promise<void> {
     if (!this.state.isReady()) {
       throw new Error("Not connected to Roon Core");
     }
 
-    let output;
-    if (outputIdOrName) {
-      output = this.state.getOutput(outputIdOrName);
-    } else {
-      // Use first output of first zone
-      const zone = this.state.getFirstZone();
-      if (zone) {
-        output = zone.outputs[0];
-      }
-    }
-
+    const output = this.state.getOutput(outputIdOrName);
     if (!output) {
-      throw new Error("Output not found");
+      throw new Error(`Output not found: ${outputIdOrName}`);
     }
 
     return new Promise((resolve, reject) => {

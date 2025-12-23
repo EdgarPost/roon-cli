@@ -5,7 +5,7 @@ export function registerMute(program: Command): void {
   program
     .command("mute")
     .description("Mute output")
-    .option("-o, --output <output>", "Output name or ID")
+    .requiredOption("-o, --output <output>", "Output name or ID")
     .action(async (options) => {
       try {
         const output = options.output;
@@ -20,7 +20,7 @@ export function registerMute(program: Command): void {
   program
     .command("unmute")
     .description("Unmute output")
-    .option("-o, --output <output>", "Output name or ID")
+    .requiredOption("-o, --output <output>", "Output name or ID")
     .action(async (options) => {
       try {
         const output = options.output;

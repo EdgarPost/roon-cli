@@ -74,15 +74,15 @@ export type Methods = {
 
   // Volume
   volume: {
-    params: { output?: string; value: number; relative?: boolean };
+    params: { output: string; value: number; relative?: boolean };
     result: { success: boolean };
   };
   mute: {
-    params: { output?: string };
+    params: { output: string };
     result: { success: boolean };
   };
   unmute: {
-    params: { output?: string };
+    params: { output: string };
     result: { success: boolean };
   };
 
