@@ -30,8 +30,40 @@ A command-line interface for [Roon](https://roonlabs.com/) music player. Control
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 18+ (not required for Nix)
 - A running Roon Core on your network
+
+### One-liner install (Linux/macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/EdgarPost/roon-cli/main/install.sh | bash
+```
+
+This installs to `~/.local/share/roon-cli` and creates symlinks in `~/.local/bin`.
+
+### Nix / NixOS
+
+```bash
+# Try it out
+nix run github:EdgarPost/roon-cli -- --help
+
+# Install to profile
+nix profile install github:EdgarPost/roon-cli
+
+# Or add to flake.nix inputs
+{
+  inputs.roon-cli.url = "github:EdgarPost/roon-cli";
+}
+```
+
+**Home-manager module** (optional):
+
+```nix
+{
+  imports = [ inputs.roon-cli.homeManagerModules.default ];
+  services.roon-cli.enable = true;
+}
+```
 
 ### Build from source
 
