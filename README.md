@@ -113,6 +113,15 @@ roon zone clear                 # Clear default zone
 roon outputs                    # List all outputs
 ```
 
+### Zone Management
+
+```bash
+roon group "Kitchen" "Dining Room"    # Group outputs together
+roon ungroup "Kitchen"                 # Ungroup an output
+roon transfer "Kitchen" "Bedroom"      # Move queue to another zone
+roon standby "Kitchen"                 # Put output in standby
+```
+
 ### Playback Settings
 
 ```bash
@@ -131,6 +140,8 @@ roon browse playlists           # Browse playlists
 roon search "miles davis"       # Search library
 roon select 1                   # Select item #1 from results
 roon select --key <item_key>    # Select by item key
+roon back                       # Go back one level
+roon back 2                     # Go back 2 levels
 roon queue                      # Show current queue
 ```
 
