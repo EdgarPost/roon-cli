@@ -194,6 +194,16 @@ export class IPCServer {
       case "radio":
         return this.handleRadio(params);
 
+      // Zone management
+      case "group":
+        return this.handleGroup(params);
+      case "ungroup":
+        return this.handleUngroup(params);
+      case "transfer":
+        return this.handleTransfer(params);
+      case "standby":
+        return this.handleStandby(params);
+
       // Browse
       case "browse":
         return this.handleBrowse(params);
@@ -385,6 +395,96 @@ export class IPCServer {
 
     await this.roon.changeSettings(zoneIdOrName, { autoRadio: enabled });
     return { success: true, enabled };
+  }
+
+  /**
+   * Handle group outputs
+   */
+  private async handleGroup(params: Record<string, unknown>): Promise<{ success: boolean }> {
+    if (!this.roon.getState().isReady()) {
+      throw { code: ErrorCodes.NOT_CONNECTED, message: "Not connected to Roon Core" };
+    }
+
+    const outputs = params.outputs as string[];
+    if (!outputs || !Array.isArray(outputs) || outputs.length < 2) {
+      throw { code: ErrorCodes.INVALID_PARAMS, message: "At least 2 output names/IDs required" };
+    }
+
+    // Resolve output names to IDs
+    const outputIds: string[] = [];
+    for (const o of outputs) {
+      const output = this.roon.getState().getOutput(o);
+      if (!output) {
+        throw { code: ErrorCodes.OUTPUT_NOT_FOUND, message: `Output not found: ${o}` };
+      }
+      outputIds.push(output.outputId);
+    }
+
+    await this.roon.groupOutputs(outputIds);
+    return { success: true };
+  }
+
+  /**
+   * Handle ungroup outputs
+   */
+  private async handleUngroup(params: Record<string, unknown>): Promise<{ success: boolean }> {
+    if (!this.roon.getState().isReady()) {
+      throw { code: ErrorCodes.NOT_CONNECTED, message: "Not connected to Roon Core" };
+    }
+
+    const outputs = params.outputs as string[];
+    if (!outputs || !Array.isArray(outputs)) {
+      throw { code: ErrorCodes.INVALID_PARAMS, message: "Output names/IDs required" };
+    }
+
+    // Resolve output names to IDs
+    const outputIds: string[] = [];
+    for (const o of outputs) {
+      const output = this.roon.getState().getOutput(o);
+      if (!output) {
+        throw { code: ErrorCodes.OUTPUT_NOT_FOUND, message: `Output not found: ${o}` };
+      }
+      outputIds.push(output.outputId);
+    }
+
+    await this.roon.ungroupOutputs(outputIds);
+    return { success: true };
+  }
+
+  /**
+   * Handle transfer zone
+   */
+  private async handleTransfer(params: Record<string, unknown>): Promise<{ success: boolean }> {
+    if (!this.roon.getState().isReady()) {
+      throw { code: ErrorCodes.NOT_CONNECTED, message: "Not connected to Roon Core" };
+    }
+
+    const from = params.from as string;
+    const to = params.to as string;
+
+    if (!from || !to) {
+      throw { code: ErrorCodes.INVALID_PARAMS, message: "from and to zone names required" };
+    }
+
+    await this.roon.transferZone(from, to);
+    return { success: true };
+  }
+
+  /**
+   * Handle standby
+   */
+  private async handleStandby(params: Record<string, unknown>): Promise<{ success: boolean }> {
+    if (!this.roon.getState().isReady()) {
+      throw { code: ErrorCodes.NOT_CONNECTED, message: "Not connected to Roon Core" };
+    }
+
+    const output = params.output as string;
+    if (!output) {
+      throw { code: ErrorCodes.INVALID_PARAMS, message: "output name/ID required" };
+    }
+
+    await this.roon.standby(output);
+    return { success: true };
   }
 
   /**

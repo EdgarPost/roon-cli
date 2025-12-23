@@ -20,6 +20,9 @@ import { registerSearch } from "./commands/search.js";
 import { registerSelect } from "./commands/select.js";
 import { registerBack } from "./commands/back.js";
 import { registerQueue } from "./commands/queue.js";
+import { registerGroup, registerUngroup } from "./commands/group.js";
+import { registerTransfer } from "./commands/transfer.js";
+import { registerStandby } from "./commands/standby.js";
 
 const program = new Command();
 
@@ -50,6 +53,10 @@ registerSearch(program);
 registerSelect(program);
 registerBack(program);
 registerQueue(program);
+registerGroup(program);
+registerUngroup(program);
+registerTransfer(program);
+registerStandby(program);
 
 // Parse arguments
 program.parse();

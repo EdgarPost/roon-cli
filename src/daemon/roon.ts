@@ -297,6 +297,101 @@ export class RoonConnection {
   }
 
   /**
+   * Group outputs together
+   */
+  async groupOutputs(outputIds: string[]): Promise<void> {
+    if (!this.state.isReady()) {
+      throw new Error("Not connected to Roon Core");
+    }
+
+    if (outputIds.length < 2) {
+      throw new Error("At least 2 outputs required for grouping");
+    }
+
+    return new Promise((resolve, reject) => {
+      this.transport.group_outputs(outputIds, (error: any) => {
+        if (error) {
+          reject(new Error(`Group outputs failed: ${error}`));
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
+   * Ungroup outputs
+   */
+  async ungroupOutputs(outputIds: string[]): Promise<void> {
+    if (!this.state.isReady()) {
+      throw new Error("Not connected to Roon Core");
+    }
+
+    return new Promise((resolve, reject) => {
+      this.transport.ungroup_outputs(outputIds, (error: any) => {
+        if (error) {
+          reject(new Error(`Ungroup outputs failed: ${error}`));
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
+   * Transfer zone (move queue from one zone to another)
+   */
+  async transferZone(fromZoneIdOrName: string, toZoneIdOrName: string): Promise<void> {
+    if (!this.state.isReady()) {
+      throw new Error("Not connected to Roon Core");
+    }
+
+    const fromZone = this.state.getZone(fromZoneIdOrName);
+    const toZone = this.state.getZone(toZoneIdOrName);
+
+    if (!fromZone) {
+      throw new Error(`Source zone not found: ${fromZoneIdOrName}`);
+    }
+    if (!toZone) {
+      throw new Error(`Destination zone not found: ${toZoneIdOrName}`);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.transport.transfer_zone(fromZone.zoneId, toZone.zoneId, (error: any) => {
+        if (error) {
+          reject(new Error(`Transfer zone failed: ${error}`));
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
+   * Standby an output
+   */
+  async standby(outputIdOrName: string): Promise<void> {
+    if (!this.state.isReady()) {
+      throw new Error("Not connected to Roon Core");
+    }
+
+    const output = this.state.getOutput(outputIdOrName);
+    if (!output) {
+      throw new Error(`Output not found: ${outputIdOrName}`);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.transport.standby(output.outputId, {}, (error: any) => {
+        if (error) {
+          reject(new Error(`Standby failed: ${error}`));
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
    * Browse the Roon library
    */
   async browseBrowse(params: {
