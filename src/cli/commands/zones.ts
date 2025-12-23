@@ -6,12 +6,21 @@ export function registerZones(program: Command): void {
   program
     .command("zones")
     .description("List all zones")
-    .action(async () => {
+    .option("-j, --json", "Output as JSON")
+    .action(async (options) => {
       try {
         const zones = await send("zones");
-        console.log(formatZones(zones));
+        if (options.json) {
+          console.log(JSON.stringify(zones, null, 2));
+        } else {
+          console.log(formatZones(zones));
+        }
       } catch (err) {
-        console.error(`Error: ${err instanceof Error ? err.message : err}`);
+        if (options.json) {
+          console.log(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        } else {
+          console.error(`Error: ${err instanceof Error ? err.message : err}`);
+        }
         process.exit(1);
       }
     });

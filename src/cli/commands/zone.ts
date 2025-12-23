@@ -33,24 +33,41 @@ export function registerZone(program: Command) {
 
   // Show current default zone
   zoneCmd
-    .action(async () => {
+    .option("-j, --json", "Output as JSON")
+    .action(async (options) => {
       try {
         const config = loadConfig();
         const zones = await send<Zone[]>("zones", {});
 
-        console.log("Available zones:");
-        for (const zone of zones) {
-          const isDefault = config.defaultZone === zone.displayName || config.defaultZone === zone.zoneId;
-          const marker = isDefault ? " (default)" : "";
-          const state = zone.state === "playing" ? " ▶" : zone.state === "paused" ? " ⏸" : "";
-          console.log(`  ${zone.displayName}${state}${marker}`);
-        }
+        if (options.json) {
+          console.log(JSON.stringify({
+            defaultZone: config.defaultZone || null,
+            zones: zones.map(z => ({
+              name: z.displayName,
+              id: z.zoneId,
+              state: z.state,
+              isDefault: config.defaultZone === z.displayName || config.defaultZone === z.zoneId
+            }))
+          }, null, 2));
+        } else {
+          console.log("Available zones:");
+          for (const zone of zones) {
+            const isDefault = config.defaultZone === zone.displayName || config.defaultZone === zone.zoneId;
+            const marker = isDefault ? " (default)" : "";
+            const state = zone.state === "playing" ? " ▶" : zone.state === "paused" ? " ⏸" : "";
+            console.log(`  ${zone.displayName}${state}${marker}`);
+          }
 
-        if (!config.defaultZone) {
-          console.log("\nNo default zone set. Use 'roon zone set <name>' to set one.");
+          if (!config.defaultZone) {
+            console.log("\nNo default zone set. Use 'roon zone set <name>' to set one.");
+          }
         }
       } catch (err) {
-        console.error("Error:", err instanceof Error ? err.message : err);
+        if (options.json) {
+          console.log(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        } else {
+          console.error("Error:", err instanceof Error ? err.message : err);
+        }
         process.exit(1);
       }
     });
@@ -59,7 +76,8 @@ export function registerZone(program: Command) {
   zoneCmd
     .command("set <name>")
     .description("Set the default zone")
-    .action(async (name: string) => {
+    .option("-j, --json", "Output as JSON")
+    .action(async (name: string, options) => {
       try {
         // Verify the zone exists
         const zones = await send<Zone[]>("zones", {});
@@ -68,10 +86,17 @@ export function registerZone(program: Command) {
         );
 
         if (!zone) {
-          console.error(`Zone "${name}" not found.`);
-          console.log("\nAvailable zones:");
-          for (const z of zones) {
-            console.log(`  ${z.displayName}`);
+          if (options.json) {
+            console.log(JSON.stringify({
+              error: `Zone "${name}" not found`,
+              availableZones: zones.map(z => z.displayName)
+            }));
+          } else {
+            console.error(`Zone "${name}" not found.`);
+            console.log("\nAvailable zones:");
+            for (const z of zones) {
+              console.log(`  ${z.displayName}`);
+            }
           }
           process.exit(1);
         }
@@ -81,9 +106,17 @@ export function registerZone(program: Command) {
         config.defaultZone = zone.displayName;
         saveConfig(config);
 
-        console.log(`Default zone set to: ${zone.displayName}`);
+        if (options.json) {
+          console.log(JSON.stringify({ success: true, defaultZone: zone.displayName }, null, 2));
+        } else {
+          console.log(`Default zone set to: ${zone.displayName}`);
+        }
       } catch (err) {
-        console.error("Error:", err instanceof Error ? err.message : err);
+        if (options.json) {
+          console.log(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        } else {
+          console.error("Error:", err instanceof Error ? err.message : err);
+        }
         process.exit(1);
       }
     });
@@ -92,14 +125,24 @@ export function registerZone(program: Command) {
   zoneCmd
     .command("clear")
     .description("Clear the default zone")
-    .action(async () => {
+    .option("-j, --json", "Output as JSON")
+    .action(async (options) => {
       try {
         const config = loadConfig();
         delete config.defaultZone;
         saveConfig(config);
-        console.log("Default zone cleared.");
+
+        if (options.json) {
+          console.log(JSON.stringify({ success: true, defaultZone: null }, null, 2));
+        } else {
+          console.log("Default zone cleared.");
+        }
       } catch (err) {
-        console.error("Error:", err instanceof Error ? err.message : err);
+        if (options.json) {
+          console.log(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        } else {
+          console.error("Error:", err instanceof Error ? err.message : err);
+        }
         process.exit(1);
       }
     });

@@ -8,15 +8,24 @@ export function registerQueue(program: Command): void {
     .command("queue")
     .description("Show current queue")
     .option("-z, --zone <zone>", "Zone name or ID")
+    .option("-j, --json", "Output as JSON")
     .action(async (options) => {
       try {
         const config = getConfig();
         const zone = options.zone || config.defaultZone;
 
         const items = await send("queue", { zone });
-        console.log(formatQueue(items));
+        if (options.json) {
+          console.log(JSON.stringify(items, null, 2));
+        } else {
+          console.log(formatQueue(items));
+        }
       } catch (err) {
-        console.error(`Error: ${err instanceof Error ? err.message : err}`);
+        if (options.json) {
+          console.log(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        } else {
+          console.error(`Error: ${err instanceof Error ? err.message : err}`);
+        }
         process.exit(1);
       }
     });

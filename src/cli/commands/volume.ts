@@ -6,6 +6,7 @@ export function registerVolume(program: Command): void {
     .command("volume <level>")
     .description("Set volume level (supports +/- for relative volume)")
     .option("-o, --output <output>", "Output name or ID")
+    .option("-j, --json", "Output as JSON")
     .action(async (levelStr: string, options) => {
       try {
         const output = options.output;
@@ -22,19 +23,32 @@ export function registerVolume(program: Command): void {
         }
 
         if (isNaN(value)) {
-          console.error("Error: Invalid volume level");
+          const error = "Invalid volume level";
+          if (options.json) {
+            console.log(JSON.stringify({ error }));
+          } else {
+            console.error(`Error: ${error}`);
+          }
           process.exit(1);
         }
 
-        await send("volume", { output, value, relative });
+        const result = await send("volume", { output, value, relative });
 
-        if (relative) {
-          console.log(`Volume adjusted by ${value > 0 ? "+" : ""}${value}`);
+        if (options.json) {
+          console.log(JSON.stringify({ success: true, value, relative }, null, 2));
         } else {
-          console.log(`Volume set to ${value}`);
+          if (relative) {
+            console.log(`Volume adjusted by ${value > 0 ? "+" : ""}${value}`);
+          } else {
+            console.log(`Volume set to ${value}`);
+          }
         }
       } catch (err) {
-        console.error(`Error: ${err instanceof Error ? err.message : err}`);
+        if (options.json) {
+          console.log(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        } else {
+          console.error(`Error: ${err instanceof Error ? err.message : err}`);
+        }
         process.exit(1);
       }
     });

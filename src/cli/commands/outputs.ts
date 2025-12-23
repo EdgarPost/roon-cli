@@ -6,12 +6,21 @@ export function registerOutputs(program: Command): void {
   program
     .command("outputs")
     .description("List all outputs")
-    .action(async () => {
+    .option("-j, --json", "Output as JSON")
+    .action(async (options) => {
       try {
         const outputs = await send("outputs");
-        console.log(formatOutputs(outputs));
+        if (options.json) {
+          console.log(JSON.stringify(outputs, null, 2));
+        } else {
+          console.log(formatOutputs(outputs));
+        }
       } catch (err) {
-        console.error(`Error: ${err instanceof Error ? err.message : err}`);
+        if (options.json) {
+          console.log(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        } else {
+          console.error(`Error: ${err instanceof Error ? err.message : err}`);
+        }
         process.exit(1);
       }
     });

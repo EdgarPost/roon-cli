@@ -7,6 +7,7 @@ export function registerShuffle(program: Command): void {
     .command("shuffle [on|off]")
     .description("Toggle or set shuffle mode")
     .option("-z, --zone <zone>", "Zone name or ID")
+    .option("-j, --json", "Output as JSON")
     .action(async (mode: string | undefined, options) => {
       try {
         const config = getConfig();
@@ -19,15 +20,28 @@ export function registerShuffle(program: Command): void {
           } else if (mode === "off" || mode === "false") {
             enabled = false;
           } else {
-            console.error("Error: Mode must be 'on' or 'off'");
+            const error = "Mode must be 'on' or 'off'";
+            if (options.json) {
+              console.log(JSON.stringify({ error }));
+            } else {
+              console.error(`Error: ${error}`);
+            }
             process.exit(1);
           }
         }
 
         const result = await send("shuffle", { zone, enabled });
-        console.log(`Shuffle ${result.enabled ? "enabled" : "disabled"}`);
+        if (options.json) {
+          console.log(JSON.stringify(result, null, 2));
+        } else {
+          console.log(`Shuffle ${result.enabled ? "enabled" : "disabled"}`);
+        }
       } catch (err) {
-        console.error(`Error: ${err instanceof Error ? err.message : err}`);
+        if (options.json) {
+          console.log(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        } else {
+          console.error(`Error: ${err instanceof Error ? err.message : err}`);
+        }
         process.exit(1);
       }
     });
