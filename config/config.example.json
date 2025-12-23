@@ -1,0 +1,6 @@
+{
+  "defaultZone": null,
+  "coreHost": null,
+  "corePort": 9100,
+  "socketPath": "/tmp/roon-cli.sock"
+}
