@@ -42,7 +42,7 @@ export class RoonConnection {
       website: "https://github.com/roon-cli/roon-cli",
 
       core_paired: (core: any) => {
-        console.log(`Paired with core: ${core.display_name} (${core.core_id})`);
+        console.log(`Connected to Roon Core: ${core.display_name} (${core.core_id})`);
         this.core = core;
         this.isConnected = true;
 
@@ -51,28 +51,34 @@ export class RoonConnection {
         this.browse = core.services.RoonApiBrowse;
 
         // Subscribe to transport updates
-        this.transport.subscribe_zones((response: string, data: any) => {
-          if (response === "Subscribed") {
-            this.state.updateZones(data);
-            this.state.setConnectionStatus(true, true, core.display_name, core.core_id);
-          } else if (response === "Changed") {
-            this.state.updateZones(data);
-          } else if (response === "Unsubscribed") {
-            this.state.updateZones({ zones: [] });
-            this.state.setConnectionStatus(this.isConnected, false);
-          }
-        });
+        if (this.transport) {
+          this.transport.subscribe_zones((response: string, data: any) => {
+            if (response === "Subscribed") {
+              console.log(`Subscribed to zones: ${data.zones?.length || 0} zones available`);
+              this.state.updateZones(data);
+              this.state.setConnectionStatus(true, true, core.display_name, core.core_id);
+            } else if (response === "Changed") {
+              this.state.updateZones(data);
+            } else if (response === "Unsubscribed") {
+              console.log("Unsubscribed from zones");
+              this.state.updateZones({ zones: [] });
+              this.state.setConnectionStatus(this.isConnected, false);
+            }
+          });
+        }
 
         // Update status
         this.status.set_status("Connected to " + core.display_name, false);
       },
 
       core_unpaired: (core: any) => {
-        console.log(`Unpaired from core: ${core.display_name}`);
+        console.log(`Disconnected from Roon Core: ${core.display_name}`);
         this.core = null;
         this.isConnected = false;
+        this.transport = null;
+        this.browse = null;
         this.state.setConnectionStatus(false, false);
-        this.status.set_status("Not connected", false);
+        this.status.set_status("Disconnected - waiting for reconnection...", false);
       },
     });
 

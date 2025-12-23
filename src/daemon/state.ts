@@ -25,30 +25,76 @@ export class StateManager {
   }
 
   /**
-   * Update zones from Roon transport subscription
+   * Update zones from Roon transport subscription (initial load)
    */
-  updateZones(roonZones: any): void {
-    // Clear existing zones
-    this.zones.clear();
-    this.outputs.clear();
-
-    if (!roonZones || !roonZones.zones) {
-      this.notifyChange();
+  updateZones(data: any): void {
+    if (!data) {
       return;
     }
 
-    // Process each zone
-    for (const roonZone of roonZones.zones) {
-      const zone = this.parseZone(roonZone);
-      this.zones.set(zone.zoneId, zone);
+    // Handle initial subscription with full zone list
+    if (data.zones) {
+      this.zones.clear();
+      this.outputs.clear();
+      for (const roonZone of data.zones) {
+        this.addOrUpdateZone(roonZone);
+      }
+    }
 
-      // Also add outputs to the outputs map
-      for (const output of zone.outputs) {
-        this.outputs.set(output.outputId, output);
+    // Handle zones_added
+    if (data.zones_added) {
+      for (const roonZone of data.zones_added) {
+        this.addOrUpdateZone(roonZone);
+      }
+    }
+
+    // Handle zones_changed
+    if (data.zones_changed) {
+      for (const roonZone of data.zones_changed) {
+        this.addOrUpdateZone(roonZone);
+      }
+    }
+
+    // Handle zones_removed
+    if (data.zones_removed) {
+      for (const zoneId of data.zones_removed) {
+        const zone = this.zones.get(zoneId);
+        if (zone) {
+          for (const output of zone.outputs) {
+            this.outputs.delete(output.outputId);
+          }
+        }
+        this.zones.delete(zoneId);
+      }
+    }
+
+    // Handle zones_seek_changed (just update seek position)
+    if (data.zones_seek_changed) {
+      for (const seekData of data.zones_seek_changed) {
+        const zone = this.zones.get(seekData.zone_id);
+        if (zone && zone.nowPlaying) {
+          zone.nowPlaying.seekPosition = seekData.seek_position;
+          if (seekData.queue_time_remaining !== undefined) {
+            zone.queueTimeRemaining = seekData.queue_time_remaining;
+          }
+        }
       }
     }
 
     this.notifyChange();
+  }
+
+  /**
+   * Add or update a zone
+   */
+  private addOrUpdateZone(roonZone: any): void {
+    const zone = this.parseZone(roonZone);
+    this.zones.set(zone.zoneId, zone);
+
+    // Also add outputs to the outputs map
+    for (const output of zone.outputs) {
+      this.outputs.set(output.outputId, output);
+    }
   }
 
   /**

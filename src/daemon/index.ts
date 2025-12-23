@@ -127,16 +127,31 @@ async function main() {
     roon.connect();
     console.log("Roon connection initiated");
 
-    // Log state changes
+    // Track connection state for logging only on changes
+    let lastConnected = false;
+    let lastPaired = false;
+    let lastZoneCount = 0;
+
+    // Log meaningful state changes only
     state.onChange(() => {
       const daemonState = state.getState();
-      if (daemonState.connected && daemonState.paired) {
-        console.log(`Connected to ${daemonState.coreName || "Roon Core"}`);
-        console.log(`Active zones: ${daemonState.zones.length}`);
-      } else if (daemonState.connected) {
-        console.log("Connected but waiting for pairing...");
-      } else {
-        console.log("Disconnected from Roon Core");
+      const connected = daemonState.connected;
+      const paired = daemonState.paired;
+      const zoneCount = daemonState.zones.length;
+
+      // Only log when connection state or zone count changes
+      if (connected !== lastConnected || paired !== lastPaired || zoneCount !== lastZoneCount) {
+        if (connected && paired) {
+          console.log(`Connected to ${daemonState.coreName || "Roon Core"} - ${zoneCount} zones available`);
+        } else if (connected) {
+          console.log("Connected, waiting for pairing approval in Roon...");
+        } else if (lastConnected) {
+          console.log("Disconnected from Roon Core");
+        }
+
+        lastConnected = connected;
+        lastPaired = paired;
+        lastZoneCount = zoneCount;
       }
     });
 
