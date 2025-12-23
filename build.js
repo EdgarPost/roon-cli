@@ -4,7 +4,7 @@ const common = {
   bundle: true,
   platform: "node",
   target: "node18",
-  format: "esm",
+  format: "cjs",
   sourcemap: true,
   external: [
     "node-roon-api",
@@ -19,7 +19,7 @@ await Promise.all([
   esbuild.build({
     ...common,
     entryPoints: ["src/daemon/index.ts"],
-    outfile: "dist/daemon.js",
+    outfile: "dist/daemon.cjs",
     banner: {
       js: "#!/usr/bin/env node",
     },
@@ -27,7 +27,7 @@ await Promise.all([
   esbuild.build({
     ...common,
     entryPoints: ["src/cli/index.ts"],
-    outfile: "dist/cli.js",
+    outfile: "dist/cli.cjs",
     banner: {
       js: "#!/usr/bin/env node",
     },

@@ -4,8 +4,8 @@
   "description": "Command-line interface for Roon music player",
   "type": "module",
   "bin": {
-    "roon": "./dist/cli.js",
-    "roon-daemon": "./dist/daemon.js"
+    "roon": "./dist/cli.cjs",
+    "roon-daemon": "./dist/daemon.cjs"
   },
   "scripts": {
     "build": "node build.js",

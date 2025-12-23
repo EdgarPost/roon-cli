@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { Command } from "commander";
 import { registerPlay } from "./commands/play.js";
 import { registerPause } from "./commands/pause.js";
