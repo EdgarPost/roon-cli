@@ -201,6 +201,8 @@ export class IPCServer {
         return this.handleSearch(params);
       case "select":
         return this.handleSelect(params);
+      case "back":
+        return this.handleBack(params);
 
       // Queue
       case "queue":
@@ -437,6 +439,7 @@ export class IPCServer {
       const result = await this.roon.browseBrowse({
         hierarchy: "search",
         input: query,
+        popAll: true,  // Reset browse session before new search
         zoneIdOrName: params.zone as string | undefined,
       });
 
@@ -486,6 +489,34 @@ export class IPCServer {
       });
 
       // Update stored results if we got a new list
+      if (result.items && result.items.length > 0) {
+        this.lastBrowseItems = result.items;
+      }
+
+      return result;
+    } catch (err: any) {
+      throw { code: ErrorCodes.BROWSE_ERROR, message: err.message };
+    }
+  }
+
+  /**
+   * Handle back - go back one level in browse hierarchy
+   */
+  private async handleBack(params: Record<string, unknown>): Promise<BrowseResult> {
+    if (!this.roon.getState().isReady()) {
+      throw { code: ErrorCodes.NOT_CONNECTED, message: "Not connected to Roon Core" };
+    }
+
+    const levels = (params.levels as number) || 1;
+
+    try {
+      const result = await this.roon.browseBrowse({
+        hierarchy: this.lastBrowseHierarchy,
+        popLevels: levels,
+        zoneIdOrName: params.zone as string | undefined,
+      });
+
+      // Update stored results
       if (result.items && result.items.length > 0) {
         this.lastBrowseItems = result.items;
       }
