@@ -3,7 +3,8 @@ import * as fs from "fs";
 import type { IPCRequest, IPCResponse, Methods, SubscriptionEventType, SubscribeParams, SubscribeResult } from "../shared/protocol.js";
 import { ErrorCodes } from "../shared/protocol.js";
 import type { RoonConnection } from "./roon.js";
-import type { LoopMode, BrowseItem, BrowseResult } from "../shared/types.js";
+import type { HttpServer } from "./http.js";
+import type { LoopMode, BrowseItem, BrowseResult, Zone } from "../shared/types.js";
 import { SubscriptionManager } from "./subscriptions.js";
 
 /**
@@ -14,14 +15,16 @@ export class IPCServer {
   private server: net.Server | null = null;
   private socketPath: string;
   private roon: RoonConnection;
+  private httpServer: HttpServer;
   private clients: Set<net.Socket> = new Set();
   private lastBrowseItems: BrowseItem[] = [];
   private lastBrowseHierarchy: string = "browse";
   private subscriptionManager: SubscriptionManager;
 
-  constructor(roon: RoonConnection, socketPath: string) {
+  constructor(roon: RoonConnection, socketPath: string, httpServer: HttpServer) {
     this.roon = roon;
     this.socketPath = socketPath;
+    this.httpServer = httpServer;
     this.subscriptionManager = new SubscriptionManager();
 
     // Wire up state events to subscription broadcasts
@@ -225,7 +228,7 @@ export class IPCServer {
 
       // Zones
       case "zones":
-        return state.getZones();
+        return state.getZones().map(z => this.enrichZoneWithAlbumArt(z));
       case "zone":
         return this.handleGetZone(params);
       case "outputs":
@@ -353,17 +356,37 @@ export class IPCServer {
   }
 
   /**
+   * Enrich a zone with album art URL
+   */
+  private enrichZoneWithAlbumArt(zone: Zone | null): Zone | null {
+    if (!zone) return null;
+
+    // Clone the zone to avoid mutating the original
+    const enriched = { ...zone };
+    if (enriched.nowPlaying) {
+      enriched.nowPlaying = { ...enriched.nowPlaying };
+      if (enriched.nowPlaying.imageKey) {
+        enriched.nowPlaying.albumArtUrl = this.httpServer.getAlbumArtUrl(enriched.nowPlaying.imageKey);
+      }
+    }
+    return enriched;
+  }
+
+  /**
    * Get a specific zone
    */
   private handleGetZone(params: Record<string, unknown>): any {
     const state = this.roon.getState();
-    const zone = params.zone as string | undefined;
+    const zoneParam = params.zone as string | undefined;
 
-    if (zone) {
-      return state.getZone(zone) || null;
+    let zone: Zone | null;
+    if (zoneParam) {
+      zone = state.getZone(zoneParam) || null;
     } else {
-      return state.getFirstZone() || null;
+      zone = state.getFirstZone() || null;
     }
+
+    return this.enrichZoneWithAlbumArt(zone);
   }
 
   /**

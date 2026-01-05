@@ -7,6 +7,7 @@ export interface NowPlaying {
   track: string;
   album: string;
   imageKey?: string;
+  albumArtUrl?: string;
   seekPosition?: number;
   length?: number;
 }
@@ -103,6 +104,7 @@ export interface Config {
   coreHost?: string;
   corePort?: number;
   socketPath?: string;
+  httpPort?: number;
 }
 
 // Waybar output format
@@ -112,6 +114,7 @@ export interface WaybarOutput {
   class: string;
   percentage?: number;
   alt?: string;
+  albumArtUrl?: string;
 }
 
 // Subscription event data types

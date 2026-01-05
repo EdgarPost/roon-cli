@@ -31,6 +31,11 @@ export function formatStatus(zone: Zone | null, json: boolean = false): string {
     lines.push(`Track:  ${zone.nowPlaying.track}`);
     lines.push(`Album:  ${zone.nowPlaying.album}`);
 
+    // Album art URL
+    if (zone.nowPlaying.albumArtUrl) {
+      lines.push(`Art:    ${zone.nowPlaying.albumArtUrl}`);
+    }
+
     // Progress bar
     if (zone.nowPlaying.seekPosition !== undefined && zone.nowPlaying.length) {
       const progress = formatProgress(
@@ -68,7 +73,7 @@ export function formatWaybar(zone: Zone): string {
   };
 
   if (zone.nowPlaying) {
-    const { artist, track, seekPosition, length } = zone.nowPlaying;
+    const { artist, track, seekPosition, length, albumArtUrl } = zone.nowPlaying;
 
     // Main text - truncate if needed
     output.text = `${artist} - ${track}`;
@@ -94,6 +99,11 @@ export function formatWaybar(zone: Zone): string {
 
     output.tooltip = tooltipLines.filter(Boolean).join("\n");
     output.alt = zone.state;
+
+    // Include album art URL
+    if (albumArtUrl) {
+      output.albumArtUrl = albumArtUrl;
+    }
   } else {
     output.text = zone.displayName;
     output.tooltip = `Zone: ${zone.displayName}\nState: ${zone.state}`;

@@ -4,8 +4,9 @@ import * as os from "os";
 import { StateManager } from "./state.js";
 import { RoonConnection } from "./roon.js";
 import { IPCServer } from "./server.js";
+import { HttpServer } from "./http.js";
 import type { Config } from "../shared/types.js";
-import { DEFAULT_SOCKET_PATH } from "../shared/protocol.js";
+import { DEFAULT_SOCKET_PATH, DEFAULT_HTTP_PORT } from "../shared/protocol.js";
 
 /**
  * Roon CLI Daemon
@@ -62,8 +63,9 @@ async function main() {
   // Load config
   const config = loadConfig();
 
-  // Determine socket path
+  // Determine socket path and HTTP port
   const socketPath = config.socketPath || DEFAULT_SOCKET_PATH;
+  const httpPort = config.httpPort || DEFAULT_HTTP_PORT;
 
   // Create state manager
   const state = new StateManager();
@@ -74,8 +76,11 @@ async function main() {
     corePort: config.corePort,
   });
 
+  // Create HTTP server for album art
+  const httpServer = new HttpServer(roon, httpPort);
+
   // Create IPC server
-  const server = new IPCServer(roon, socketPath);
+  const server = new IPCServer(roon, socketPath, httpServer);
 
   // Graceful shutdown handler
   let isShuttingDown = false;
@@ -88,9 +93,10 @@ async function main() {
     console.log(`\nReceived ${signal}, shutting down gracefully...`);
 
     try {
-      // Stop IPC server
+      // Stop servers
       await server.stop();
-      console.log("IPC server stopped");
+      await httpServer.stop();
+      console.log("Servers stopped");
 
       // Note: Roon API doesn't provide a clean shutdown method,
       // but the connection will be closed when the process exits
@@ -119,9 +125,11 @@ async function main() {
   });
 
   try {
-    // Start IPC server
+    // Start servers
     await server.start();
+    await httpServer.start();
     console.log(`IPC server started on ${socketPath}`);
+    console.log(`HTTP server started on port ${httpPort}`);
 
     // Connect to Roon Core
     roon.connect();

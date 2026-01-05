@@ -201,6 +201,9 @@ export type Methods = {
 // Default socket path
 export const DEFAULT_SOCKET_PATH = "/tmp/roon-cli.sock";
 
+// Default HTTP port for album art
+export const DEFAULT_HTTP_PORT = 9331;
+
 // Generate unique request ID
 export function generateId(): string {
   return Math.random().toString(36).substring(2, 15);
